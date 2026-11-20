@@ -19,10 +19,8 @@ alerts:
 
 telegram: {}  #<-- present on .env
 
-sms:
-  api_key: "REPLACE_ME"
-  api_url: "REPLACE_ME"
-  to_number: "REPLACE_ME"
+sms: {}     # Fast2SMS (optional): FAST2SMS_API_KEY, SMS_TO_NUMBER come from .env
+twilio: {}  # Twilio: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, TWILIO_TO_NUMBER come from .env
 
 alerts:
   cooldown_minutes: 30

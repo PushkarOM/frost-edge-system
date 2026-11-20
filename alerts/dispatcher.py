@@ -6,8 +6,9 @@ from datetime import UTC, datetime
 from alerts.alert_policy import AlertPolicy
 from alerts.base import AlertChannel
 from alerts.console_channel import ConsoleAlertChannel
-from alerts.sms_gateway import SmsAlertChannel
+from alerts.sms_gateway import FAST2SMS_URL, SmsAlertChannel
 from alerts.telegram_bot import TelegramAlertChannel
+from alerts.twilio_sms import TwilioSmsChannel
 
 # add .env
 from config.loader import load_config, load_env
@@ -17,6 +18,13 @@ load_env()  # this read .env
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("frost-alerts")
+
+
+def _cfg_or_env(section: dict, key: str, env_name: str) -> str | None:
+    """config.yaml value if it is set to something real, else the .env value.
+    The example file's "REPLACE_ME" placeholder counts as unset."""
+    value = section.get(key)
+    return value if value and value != "REPLACE_ME" else os.getenv(env_name)
 
 
 def build_channels(config: dict) -> dict[str, AlertChannel]:
@@ -40,8 +48,27 @@ def build_channels(config: dict) -> dict[str, AlertChannel]:
             channels[name] = TelegramAlertChannel(bot_token, chat_id)
 
         elif name == "sms":
-            sms = config["sms"]
-            channels[name] = SmsAlertChannel(sms["api_key"], sms["api_url"], sms["to_number"])
+            # Fast2SMS. config.yaml first, .env fallback ("REPLACE_ME" counts as unset).
+            sms = config.get("sms") or {}
+            api_key = _cfg_or_env(sms, "api_key", "FAST2SMS_API_KEY")
+            to_number = _cfg_or_env(sms, "to_number", "SMS_TO_NUMBER")
+            if not api_key or not to_number:
+                raise ValueError("SMS channel requires an api_key and to_number")
+            api_url = _cfg_or_env(sms, "api_url", "FAST2SMS_URL") or FAST2SMS_URL
+            channels[name] = SmsAlertChannel(api_key, api_url, to_number)
+
+        elif name == "twilio":
+            tw = config.get("twilio") or {}
+            sid = _cfg_or_env(tw, "account_sid", "TWILIO_ACCOUNT_SID")
+            token = _cfg_or_env(tw, "auth_token", "TWILIO_AUTH_TOKEN")
+            from_number = _cfg_or_env(tw, "from_number", "TWILIO_FROM_NUMBER")
+            to_number = _cfg_or_env(tw, "to_number", "TWILIO_TO_NUMBER")
+            if not (sid and token and from_number and to_number):
+                raise ValueError(
+                    "Twilio channel requires account_sid, auth_token, from_number and to_number"
+                )
+            channels[name] = TwilioSmsChannel(sid, token, from_number, to_number)
+
         else:
             raise ValueError(f"Unknown alert channel: {name!r}")
     return channels
